@@ -2,17 +2,36 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import JSZip from 'jszip';
-import { ImageFile, CompressionSettings } from '@/types/image';
+import {
+  ImageFile,
+  ToolMode,
+  CompressionSettings,
+  ResizeSettings,
+  ConvertSettings,
+  CropTransformSettings,
+  MediaExtractSettings,
+} from '@/types/image';
 import { compressImage, getImageDimensions } from '@/lib/compress-image';
+import { resizeImage } from '@/lib/resize-image';
+import { convertImage } from '@/lib/convert-image';
+import { transformImage } from '@/lib/crop-transform';
+import { extractAudioFromMedia, extractFramesFromVideo } from '@/lib/media-extractor';
+
 import { Hero } from '@/components/hero';
+import { NavbarTabs } from '@/components/navbar-tabs';
 import { UploadZone } from '@/components/upload-zone';
 import { CompressionSettingsPanel } from '@/components/compression-settings';
+import { ResizerPanel } from '@/components/resizer-panel';
+import { ConverterPanel } from '@/components/converter-panel';
+import { CropPanel } from '@/components/crop-panel';
+import { MediaExtractorPanel } from '@/components/media-extractor-panel';
 import { ImagePreviewList } from '@/components/image-preview';
 import { StatsCard } from '@/components/stats-card';
 import { ComparisonView } from '@/components/comparison-view';
 import { ResultSection } from '@/components/result-section';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { Sparkles, Info, ShieldCheck, RefreshCw } from 'lucide-react';
+
+import { Sparkles, Info, ShieldCheck, RefreshCw, Scaling, Minimize2, Crop, Film } from 'lucide-react';
 
 interface Toast {
   id: string;
@@ -22,25 +41,64 @@ interface Toast {
 
 export default function Home() {
   // Application State
+  const [toolMode, setToolMode] = useState<ToolMode>('compress');
   const [files, setFiles] = useState<ImageFile[]>([]);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const [isDownloadingZip, setIsDownloadingZip] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [settings, setSettings] = useState<CompressionSettings>({
+
+  // Tool Specific Settings
+  const [compressSettings, setCompressSettings] = useState<CompressionSettings>({
     quality: 80,
     format: 'original',
     keepAspectRatio: true,
   });
 
-  // Cleanup helper for object URLs to prevent memory leaks
+  const [resizeSettings, setResizeSettings] = useState<ResizeSettings>({
+    mode: 'exact',
+    width: undefined,
+    height: undefined,
+    percentage: 100,
+    preset: 'youtube-thumbnail',
+    maintainAspectRatio: true,
+    fit: 'contain',
+    backgroundColor: 'transparent',
+    quality: 90,
+  });
+
+  const [convertSettings, setConvertSettings] = useState<ConvertSettings>({
+    targetFormat: 'webp',
+    quality: 85,
+    backgroundColor: 'transparent',
+    icoSize: 64,
+  });
+
+  const [cropSettings, setCropSettings] = useState<CropTransformSettings>({
+    aspectRatioPreset: 'free',
+    rotation: 0,
+    flipHorizontal: false,
+    flipVertical: false,
+    quality: 90,
+  });
+
+  const [mediaSettings, setMediaSettings] = useState<MediaExtractSettings>({
+    mode: 'audio',
+    audioFormat: 'wav',
+    frameInterval: 2,
+    maxFrames: 8,
+  });
+
+  // Cleanup helper for object URLs
   const cleanupFilesUrls = useCallback((filesList: ImageFile[]) => {
     filesList.forEach((f) => {
       if (f.originalPreviewUrl) URL.revokeObjectURL(f.originalPreviewUrl);
       if (f.compressedPreviewUrl) URL.revokeObjectURL(f.compressedPreviewUrl);
+      if (f.extractedFrames) {
+        f.extractedFrames.forEach((frame) => URL.revokeObjectURL(frame.url));
+      }
     });
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       cleanupFilesUrls(files);
@@ -48,91 +106,184 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Toast Management Helper
-  const addToast = useCallback((message: string, type: 'success' | 'info' | 'error' = 'success') => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
+  // Toast Helper
+  const addToast = useCallback(
+    (message: string, type: 'success' | 'info' | 'error' = 'success') => {
+      const id = Math.random().toString(36).substring(2, 9);
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 3000);
+    },
+    []
+  );
 
-  // Individual Compression Runner
-  const compressSingleFile = useCallback(async (
-    id: string,
-    activeSettings: CompressionSettings,
-    currentFilesList: ImageFile[]
-  ) => {
-    const target = currentFilesList.find((f) => f.id === id);
-    if (!target) return;
+  // Universal Single File Processor
+  const processSingleFile = useCallback(
+    async (
+      id: string,
+      mode: ToolMode,
+      cSettings: CompressionSettings,
+      rSettings: ResizeSettings,
+      convSettings: ConvertSettings,
+      crSettings: CropTransformSettings,
+      mSettings: MediaExtractSettings,
+      currentFilesList: ImageFile[]
+    ) => {
+      const target = currentFilesList.find((f) => f.id === id);
+      if (!target) return;
 
-    setFiles((prev) =>
-      prev.map((f) =>
-        f.id === id
-          ? { ...f, status: 'compressing', progress: 0, errorMsg: undefined }
-          : f
-      )
-    );
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.id === id
+            ? { ...f, status: 'compressing', progress: 0, errorMsg: undefined }
+            : f
+        )
+      );
 
-    try {
-      const compressedFile = await compressImage(target.file, activeSettings, (progress) => {
+      try {
+        let processedFile: File | undefined;
+        let extractedAudio: File | undefined;
+        let extractedFramesList: { url: string; time: number; name: string; file: File }[] | undefined;
+
+        if (mode === 'compress') {
+          processedFile = await compressImage(target.file, cSettings, (progress) => {
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress } : f)));
+          });
+        } else if (mode === 'resize') {
+          processedFile = await resizeImage(target.file, rSettings, (progress) => {
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress } : f)));
+          });
+        } else if (mode === 'convert') {
+          processedFile = await convertImage(target.file, convSettings, (progress) => {
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress } : f)));
+          });
+        } else if (mode === 'crop') {
+          processedFile = await transformImage(target.file, crSettings, (progress) => {
+            setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress } : f)));
+          });
+        } else if (mode === 'media') {
+          if (mSettings.mode === 'audio') {
+            extractedAudio = await extractAudioFromMedia(target.file, (progress) => {
+              setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress } : f)));
+            });
+            processedFile = extractedAudio;
+          } else {
+            extractedFramesList = await extractFramesFromVideo(
+              target.file,
+              mSettings.frameInterval,
+              mSettings.maxFrames,
+              (progress) => {
+                setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, progress } : f)));
+              }
+            );
+            if (extractedFramesList.length > 0) {
+              processedFile = extractedFramesList[0].file;
+            }
+          }
+        }
+
+        // Clean up previous output URL
+        if (target.compressedPreviewUrl) {
+          URL.revokeObjectURL(target.compressedPreviewUrl);
+        }
+
+        let compressedPreviewUrl: string | undefined;
+        let dims = { width: target.originalWidth, height: target.originalHeight };
+
+        if (processedFile && !target.isVideo && !target.isAudio) {
+          compressedPreviewUrl = URL.createObjectURL(processedFile);
+          dims = await getImageDimensions(processedFile);
+        } else if (extractedFramesList && extractedFramesList.length > 0) {
+          compressedPreviewUrl = extractedFramesList[0].url;
+        }
+
         setFiles((prev) =>
-          prev.map((f) => (f.id === id ? { ...f, progress } : f))
+          prev.map((f) =>
+            f.id === id
+              ? {
+                  ...f,
+                  status: 'success',
+                  progress: 100,
+                  compressedFile: processedFile,
+                  compressedSize: processedFile?.size,
+                  compressedPreviewUrl,
+                  compressedWidth: dims.width,
+                  compressedHeight: dims.height,
+                  extractedAudioFile: extractedAudio,
+                  extractedFrames: extractedFramesList,
+                }
+              : f
+          )
+        );
+      } catch (error: any) {
+        console.error('Processing error for file:', target.name, error);
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.id === id
+              ? {
+                  ...f,
+                  status: 'error',
+                  progress: 0,
+                  errorMsg: error.message || 'Operation failed',
+                }
+              : f
+          )
+        );
+        addToast(`Failed to process ${target.name}`, 'error');
+      }
+    },
+    [addToast]
+  );
+
+  // Trigger processing on all active files
+  const triggerProcessAll = useCallback(
+    (
+      mode: ToolMode,
+      cSettings: CompressionSettings,
+      rSettings: ResizeSettings,
+      convSettings: ConvertSettings,
+      crSettings: CropTransformSettings,
+      mSettings: MediaExtractSettings,
+      filesList: ImageFile[]
+    ) => {
+      filesList.forEach((f) => {
+        processSingleFile(
+          f.id,
+          mode,
+          cSettings,
+          rSettings,
+          convSettings,
+          crSettings,
+          mSettings,
+          filesList
         );
       });
-
-      // Release previous compressed URL if re-running
-      if (target.compressedPreviewUrl) {
-        URL.revokeObjectURL(target.compressedPreviewUrl);
-      }
-
-      const compressedPreviewUrl = URL.createObjectURL(compressedFile);
-      const dims = await getImageDimensions(compressedFile);
-
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === id
-            ? {
-                ...f,
-                status: 'success',
-                progress: 100,
-                compressedFile,
-                compressedSize: compressedFile.size,
-                compressedPreviewUrl,
-                compressedWidth: dims.width,
-                compressedHeight: dims.height,
-              }
-            : f
-        )
-      );
-    } catch (error: any) {
-      console.error('Compression error for file:', target.name, error);
-      setFiles((prev) =>
-        prev.map((f) =>
-          f.id === id
-            ? {
-                ...f,
-                status: 'error',
-                progress: 0,
-                errorMsg: error.message || 'Compression failed',
-              }
-            : f
-        )
-      );
-      addToast(`Failed to compress ${target.name}`, 'error');
-    }
-  }, [addToast]);
+    },
+    [processSingleFile]
+  );
 
   // Handler for Files Added
   const handleFilesSelected = async (newFiles: File[]) => {
     const newImageFiles: ImageFile[] = [];
-    addToast(`Processing ${newFiles.length} image(s)...`, 'info');
+    addToast(`Importing ${newFiles.length} file(s)...`, 'info');
 
     for (const file of newFiles) {
       const id = Math.random().toString(36).substring(2, 9);
-      const originalPreviewUrl = URL.createObjectURL(file);
-      const dimensions = await getImageDimensions(file);
-      const aspectRatio = dimensions.width > 0 ? dimensions.width / dimensions.height : 1;
+      const isVideo = file.type.startsWith('video/');
+      const isAudio = file.type.startsWith('audio/');
+      let originalPreviewUrl = '';
+      let dimensions = { width: 1280, height: 720 };
+
+      if (!isVideo && !isAudio) {
+        originalPreviewUrl = URL.createObjectURL(file);
+        dimensions = await getImageDimensions(file);
+      } else {
+        originalPreviewUrl = URL.createObjectURL(file);
+      }
+
+      const aspectRatio =
+        dimensions.width > 0 ? dimensions.width / dimensions.height : 1;
 
       newImageFiles.push({
         id,
@@ -144,6 +295,8 @@ export default function Home() {
         originalType: file.type,
         originalPreviewUrl,
         aspectRatio,
+        isVideo,
+        isAudio,
         status: 'idle',
         progress: 0,
       });
@@ -151,38 +304,136 @@ export default function Home() {
 
     setFiles((prev) => {
       const updated = [...prev, ...newImageFiles];
-      // Select the first image if nothing was selected yet
       if (!selectedFileId && updated.length > 0) {
         setSelectedFileId(updated[0].id);
       }
-      
-      // Auto-compress the newly added files
+
+      // Auto process newly added files with current active tool
       newImageFiles.forEach((imageFile) => {
-        compressSingleFile(imageFile.id, settings, updated);
+        processSingleFile(
+          imageFile.id,
+          toolMode,
+          compressSettings,
+          resizeSettings,
+          convertSettings,
+          cropSettings,
+          mediaSettings,
+          updated
+        );
       });
 
       return updated;
     });
 
-    addToast(`Added ${newFiles.length} image(s) successfully.`, 'success');
+    addToast(`Added ${newFiles.length} file(s) to workspace.`, 'success');
   };
 
-  // Handler for Settings Changes
-  const handleSettingsChange = (newSettings: CompressionSettings) => {
-    setSettings(newSettings);
-    
-    // Automatically re-compress all files when settings are adjusted
+  // Tool Mode Switcher
+  const handleSelectToolMode = (newMode: ToolMode) => {
+    setToolMode(newMode);
     if (files.length > 0) {
-      files.forEach((f) => {
-        compressSingleFile(f.id, newSettings, files);
-      });
-      addToast('Settings updated. Recompressing...', 'info');
+      triggerProcessAll(
+        newMode,
+        compressSettings,
+        resizeSettings,
+        convertSettings,
+        cropSettings,
+        mediaSettings,
+        files
+      );
+      addToast(`Switched to ${newMode.toUpperCase()} mode. Processing files...`, 'info');
     }
   };
 
-  // Handler for File Selection
-  const handleSelectFile = (id: string) => {
-    setSelectedFileId(id);
+  // Handler for Settings Changes
+  const handleCompressSettingsChange = (newSettings: CompressionSettings) => {
+    setCompressSettings(newSettings);
+    if (files.length > 0 && toolMode === 'compress') {
+      files.forEach((f) => {
+        processSingleFile(
+          f.id,
+          'compress',
+          newSettings,
+          resizeSettings,
+          convertSettings,
+          cropSettings,
+          mediaSettings,
+          files
+        );
+      });
+    }
+  };
+
+  const handleResizeSettingsChange = (newSettings: ResizeSettings) => {
+    setResizeSettings(newSettings);
+    if (files.length > 0 && toolMode === 'resize') {
+      files.forEach((f) => {
+        processSingleFile(
+          f.id,
+          'resize',
+          compressSettings,
+          newSettings,
+          convertSettings,
+          cropSettings,
+          mediaSettings,
+          files
+        );
+      });
+    }
+  };
+
+  const handleConvertSettingsChange = (newSettings: ConvertSettings) => {
+    setConvertSettings(newSettings);
+    if (files.length > 0 && toolMode === 'convert') {
+      files.forEach((f) => {
+        processSingleFile(
+          f.id,
+          'convert',
+          compressSettings,
+          resizeSettings,
+          newSettings,
+          cropSettings,
+          mediaSettings,
+          files
+        );
+      });
+    }
+  };
+
+  const handleCropSettingsChange = (newSettings: CropTransformSettings) => {
+    setCropSettings(newSettings);
+    if (files.length > 0 && toolMode === 'crop') {
+      files.forEach((f) => {
+        processSingleFile(
+          f.id,
+          'crop',
+          compressSettings,
+          resizeSettings,
+          convertSettings,
+          newSettings,
+          mediaSettings,
+          files
+        );
+      });
+    }
+  };
+
+  const handleMediaSettingsChange = (newSettings: MediaExtractSettings) => {
+    setMediaSettings(newSettings);
+    if (files.length > 0 && toolMode === 'media') {
+      files.forEach((f) => {
+        processSingleFile(
+          f.id,
+          'media',
+          compressSettings,
+          resizeSettings,
+          convertSettings,
+          cropSettings,
+          newSettings,
+          files
+        );
+      });
+    }
   };
 
   // Handler for File Removal
@@ -192,10 +443,11 @@ export default function Home() {
       if (target) {
         if (target.originalPreviewUrl) URL.revokeObjectURL(target.originalPreviewUrl);
         if (target.compressedPreviewUrl) URL.revokeObjectURL(target.compressedPreviewUrl);
+        if (target.extractedFrames) {
+          target.extractedFrames.forEach((frame) => URL.revokeObjectURL(frame.url));
+        }
       }
       const updated = prev.filter((f) => f.id !== id);
-      
-      // If we deleted the active item, adjust selectedFileId
       if (selectedFileId === id) {
         setSelectedFileId(updated.length > 0 ? updated[0].id : null);
       }
@@ -205,49 +457,60 @@ export default function Home() {
 
   // Handler for Single Download
   const handleDownloadSingle = (file: ImageFile) => {
+    if (file.extractedAudioFile) {
+      downloadBlob(file.extractedAudioFile, file.extractedAudioFile.name);
+      return;
+    }
+
     if (!file.compressedFile || !file.compressedPreviewUrl) return;
-    
+    downloadBlob(file.compressedFile, file.compressedFile.name);
+    addToast(`Downloaded ${file.compressedFile.name}`, 'success');
+  };
+
+  const downloadBlob = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = file.compressedPreviewUrl;
-    a.download = file.compressedFile.name;
+    a.href = url;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    
-    addToast(`Downloaded ${file.compressedFile.name}`, 'success');
+    URL.revokeObjectURL(url);
   };
 
   // Handler for Batch ZIP Download
   const handleDownloadZip = async () => {
-    const successFiles = files.filter((f) => f.status === 'success' && f.compressedFile);
+    const successFiles = files.filter(
+      (f) => f.status === 'success' && (f.compressedFile || f.extractedFrames || f.extractedAudioFile)
+    );
     if (successFiles.length === 0) return;
 
     setIsDownloadingZip(true);
-    addToast('Generating ZIP archive...', 'info');
+    addToast('Generating ZIP package...', 'info');
 
     try {
       const zip = new JSZip();
-      
+
       successFiles.forEach((f) => {
         if (f.compressedFile) {
           zip.file(f.compressedFile.name, f.compressedFile);
         }
+        if (f.extractedAudioFile) {
+          zip.file(f.extractedAudioFile.name, f.extractedAudioFile);
+        }
+        if (f.extractedFrames && f.extractedFrames.length > 0) {
+          const folder = zip.folder(`${f.name}_frames`);
+          f.extractedFrames.forEach((fr) => {
+            folder?.file(fr.name, fr.file);
+          });
+        }
       });
 
       const zipBlob = await zip.generateAsync({ type: 'blob' });
-      const zipUrl = URL.createObjectURL(zipBlob);
-      
-      const a = document.createElement('a');
-      a.href = zipUrl;
-      a.download = `pixelshrink_compressed_${Date.now()}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(zipUrl);
-
+      downloadBlob(zipBlob, `pixelshrink_${toolMode}_${Date.now()}.zip`);
       addToast('ZIP archive downloaded successfully!', 'success');
     } catch (err) {
-      console.error('ZIP compilation error:', err);
+      console.error('ZIP generation error:', err);
       addToast('Failed to create ZIP package.', 'error');
     } finally {
       setIsDownloadingZip(false);
@@ -275,9 +538,12 @@ export default function Home() {
             </div>
             <span className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 select-none flex items-center gap-1.5">
               PixelShrink
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800/60 text-zinc-500">v1.0</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800/60 text-zinc-500">
+                Studio v2.0
+              </span>
             </span>
           </div>
+
           <div className="flex items-center gap-4">
             <ThemeToggle />
           </div>
@@ -285,103 +551,217 @@ export default function Home() {
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 flex flex-col justify-center">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 flex flex-col justify-start">
+        {/* Tool Navigation Tabs */}
+        <NavbarTabs activeMode={toolMode} onSelectMode={handleSelectToolMode} />
+
         {files.length === 0 ? (
           // Landing View
-          <div className="space-y-12 animate-fade-in">
-            <Hero />
+          <div className="space-y-10 animate-fade-in mt-2">
+            <Hero toolMode={toolMode} />
+
             <div className="max-w-2xl mx-auto w-full">
-              <UploadZone onFilesSelected={handleFilesSelected} />
+              <UploadZone
+                onFilesSelected={handleFilesSelected}
+                toolMode={toolMode}
+              />
             </div>
-            {/* Features Row */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto pt-6 text-center md:text-left">
-              <div className="p-5 rounded-2xl border border-zinc-200/50 bg-white dark:border-zinc-900/50 dark:bg-zinc-950/20 space-y-2">
-                <ShieldCheck className="w-6 h-6 text-emerald-500 mx-auto md:mx-0" />
-                <h4 className="font-bold text-sm text-zinc-800 dark:text-zinc-250">Absolute Privacy</h4>
-                <p className="text-xs text-zinc-500 dark:text-zinc-450 leading-relaxed">Images are compressed directly inside your browser. No files are uploaded to any server.</p>
+
+            {/* Studio Tools Feature Matrix */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 max-w-5xl mx-auto pt-4 text-left">
+              <div
+                onClick={() => handleSelectToolMode('compress')}
+                className="p-4 rounded-2xl border border-zinc-200/60 bg-white dark:border-zinc-900/60 dark:bg-zinc-950/30 space-y-1.5 cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-700 transition-all shadow-2xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Minimize2 className="w-4 h-4 text-emerald-500" />
+                  <h4 className="font-bold text-xs text-zinc-800 dark:text-zinc-200">Image Compressor</h4>
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  Lossless & lossy image shrinking up to 90% space reduction with visual compare.
+                </p>
               </div>
-              <div className="p-5 rounded-2xl border border-zinc-200/50 bg-white dark:border-zinc-900/50 dark:bg-zinc-950/20 space-y-2">
-                <Sparkles className="w-6 h-6 text-indigo-500 mx-auto md:mx-0" />
-                <h4 className="font-bold text-sm text-zinc-855 dark:text-zinc-250">Quality Retention</h4>
-                <p className="text-xs text-zinc-500 dark:text-zinc-450 leading-relaxed">Smart compression algorithms shrink file size by up to 90% while keeping visual details intact.</p>
+
+              <div
+                onClick={() => handleSelectToolMode('resize')}
+                className="p-4 rounded-2xl border border-zinc-200/60 bg-white dark:border-zinc-900/60 dark:bg-zinc-950/30 space-y-1.5 cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-700 transition-all shadow-2xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Scaling className="w-4 h-4 text-indigo-500" />
+                  <h4 className="font-bold text-xs text-zinc-800 dark:text-zinc-200">Image Resizer</h4>
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  YouTube thumbnail/banner, Instagram, X/Twitter presets & percentage scaling.
+                </p>
               </div>
-              <div className="p-5 rounded-2xl border border-zinc-200/50 bg-white dark:border-zinc-900/50 dark:bg-zinc-950/20 space-y-2">
-                <Info className="w-6 h-6 text-sky-500 mx-auto md:mx-0" />
-                <h4 className="font-bold text-sm text-zinc-855 dark:text-zinc-250">Batch Compression</h4>
-                <p className="text-xs text-zinc-500 dark:text-zinc-450 leading-relaxed">Drop multiple JPEG, PNG, and WEBP files. Compress all at once and download as a ZIP package.</p>
+
+              <div
+                onClick={() => handleSelectToolMode('convert')}
+                className="p-4 rounded-2xl border border-zinc-200/60 bg-white dark:border-zinc-900/60 dark:bg-zinc-950/30 space-y-1.5 cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-700 transition-all shadow-2xs"
+              >
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="w-4 h-4 text-emerald-500" />
+                  <h4 className="font-bold text-xs text-zinc-800 dark:text-zinc-200">Format Converter</h4>
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  Instant batch conversion to WEBP, JPEG, PNG, AVIF, BMP, and ICO Favicon.
+                </p>
+              </div>
+
+              <div
+                onClick={() => handleSelectToolMode('media')}
+                className="p-4 rounded-2xl border border-zinc-200/60 bg-white dark:border-zinc-900/60 dark:bg-zinc-950/30 space-y-1.5 cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-700 transition-all shadow-2xs"
+              >
+                <div className="flex items-center gap-2">
+                  <Film className="w-4 h-4 text-sky-500" />
+                  <h4 className="font-bold text-xs text-zinc-800 dark:text-zinc-200">Media Extractor</h4>
+                </div>
+                <p className="text-[11px] text-zinc-500 leading-relaxed">
+                  Extract audio tracks (WAV) and grab video snapshot frames client-side.
+                </p>
               </div>
             </div>
           </div>
         ) : (
-          // Dashboard Workspace View
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in">
+          // Dashboard Studio Workspace View
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fade-in mt-4">
             {/* Sidebar (Left Column - 5 Cols) */}
             <div className="lg:col-span-5 space-y-6">
               {/* Mini Upload Zone */}
               <div className="bg-white dark:bg-zinc-900/50 border border-zinc-200/80 dark:border-zinc-800/60 rounded-2xl p-4 shadow-2xs">
-                <UploadZone onFilesSelected={handleFilesSelected} />
+                <UploadZone
+                  onFilesSelected={handleFilesSelected}
+                  toolMode={toolMode}
+                />
               </div>
 
               {/* Uploaded List Preview */}
               <ImagePreviewList
                 files={files}
                 selectedFileId={selectedFileId}
-                onSelectFile={handleSelectFile}
+                onSelectFile={(id) => setSelectedFileId(id)}
                 onRemoveFile={handleRemoveFile}
               />
 
-              {/* Compression settings panel */}
-              <CompressionSettingsPanel
-                settings={settings}
-                onSettingsChange={handleSettingsChange}
-              />
+              {/* Dynamic Settings Panel based on active ToolMode */}
+              {toolMode === 'compress' && (
+                <CompressionSettingsPanel
+                  settings={compressSettings}
+                  onSettingsChange={handleCompressSettingsChange}
+                />
+              )}
+
+              {toolMode === 'resize' && (
+                <ResizerPanel
+                  settings={resizeSettings}
+                  onSettingsChange={handleResizeSettingsChange}
+                  originalWidth={activeFile?.originalWidth}
+                  originalHeight={activeFile?.originalHeight}
+                />
+              )}
+
+              {toolMode === 'convert' && (
+                <ConverterPanel
+                  settings={convertSettings}
+                  onSettingsChange={handleConvertSettingsChange}
+                />
+              )}
+
+              {toolMode === 'crop' && (
+                <CropPanel
+                  settings={cropSettings}
+                  onSettingsChange={handleCropSettingsChange}
+                />
+              )}
+
+              {toolMode === 'media' && (
+                <MediaExtractorPanel
+                  settings={mediaSettings}
+                  onSettingsChange={handleMediaSettingsChange}
+                  activeFile={activeFile}
+                  onDownloadAudio={(audioFile) => downloadBlob(audioFile, audioFile.name)}
+                  onDownloadFrame={(fr) => downloadBlob(fr.file, fr.name)}
+                />
+              )}
             </div>
 
-            {/* Editor/Visualizer Area (Right Column - 7 Cols) */}
+            {/* Visualizer Area (Right Column - 7 Cols) */}
             <div className="lg:col-span-7 space-y-6">
               {activeFile ? (
                 <>
                   {activeFile.status === 'compressing' && (
                     <div className="min-h-[400px] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/20 rounded-2xl flex flex-col items-center justify-center p-8 space-y-4 shadow-2xs">
-                      <RefreshCw className="w-8 h-8 text-zinc-455 animate-spin" />
+                      <RefreshCw className="w-8 h-8 text-zinc-400 animate-spin" />
                       <div className="space-y-1.5 text-center">
-                        <p className="text-sm font-bold text-zinc-850 dark:text-zinc-250">Compressing Image...</p>
-                        <p className="text-xs text-zinc-450 dark:text-zinc-500">Optimizing {activeFile.name} ({Math.round(activeFile.progress)}%)</p>
+                        <p className="text-sm font-bold text-zinc-800 dark:text-zinc-200">
+                          Processing {toolMode.toUpperCase()}...
+                        </p>
+                        <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                          Optimizing {activeFile.name} ({Math.round(activeFile.progress)}%)
+                        </p>
                       </div>
                     </div>
                   )}
 
                   {activeFile.status === 'error' && (
                     <div className="min-h-[400px] border border-red-200 bg-red-50/20 dark:border-red-900/30 dark:bg-red-950/5 rounded-2xl flex flex-col items-center justify-center p-8 space-y-3 shadow-2xs">
-                      <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-650 dark:text-red-400">
+                      <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-950/50 flex items-center justify-center text-red-600 dark:text-red-400">
                         <Info className="w-5 h-5" />
                       </div>
                       <div className="text-center space-y-1">
-                        <h4 className="text-sm font-bold text-red-800 dark:text-red-400">Optimization Failed</h4>
-                        <p className="text-xs text-red-650 dark:text-red-500 max-w-sm leading-relaxed">{activeFile.errorMsg || 'An error occurred during compression.'}</p>
+                        <h4 className="text-sm font-bold text-red-800 dark:text-red-400">
+                          Processing Failed
+                        </h4>
+                        <p className="text-xs text-red-600 dark:text-red-500 max-w-sm leading-relaxed">
+                          {activeFile.errorMsg || 'An error occurred during operation.'}
+                        </p>
                       </div>
                     </div>
                   )}
 
                   {activeFile.status === 'success' && (
                     <div className="space-y-6">
-                      {/* Before / After visual slider */}
-                      <ComparisonView file={activeFile} />
+                      {/* Before / After comparison slider (for images) */}
+                      {!activeFile.isVideo && !activeFile.isAudio && (
+                        <ComparisonView file={activeFile} />
+                      )}
 
-                      {/* Compression stats summary card */}
-                      <StatsCard file={activeFile} />
+                      {/* Video Player (if video file in media mode) */}
+                      {activeFile.isVideo && activeFile.originalPreviewUrl && (
+                        <div className="space-y-2">
+                          <label className="text-xs font-semibold text-zinc-500 block">
+                            Video Player
+                          </label>
+                          <div className="aspect-video bg-black rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800">
+                            <video
+                              controls
+                              src={activeFile.originalPreviewUrl}
+                              className="w-full h-full"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Compression & Output Stats card */}
+                      {!activeFile.isVideo && !activeFile.isAudio && (
+                        <StatsCard file={activeFile} />
+                      )}
                     </div>
                   )}
                 </>
               ) : (
                 <div className="min-h-[400px] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900/20 rounded-2xl flex flex-col items-center justify-center p-8 space-y-2 shadow-2xs">
-                  <p className="text-sm font-bold text-zinc-500 dark:text-zinc-450">No Image Selected</p>
-                  <p className="text-xs text-zinc-450 dark:text-zinc-500">Select an image from the sidebar to inspect compression details.</p>
+                  <p className="text-sm font-bold text-zinc-500 dark:text-zinc-400">
+                    No File Selected
+                  </p>
+                  <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                    Select a file from the sidebar to inspect output.
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* Bottom Actions footer (spans all columns) */}
+            {/* Bottom Actions footer */}
             <div className="lg:col-span-12">
               <ResultSection
                 files={files}
