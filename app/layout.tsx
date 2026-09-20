@@ -14,24 +14,37 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PixelShrink — Free Browser-Side Image Compressor",
-  description: "Reduce image size without sacrificing quality. 100% private, secure, fast and client-side browser image compression.",
-  keywords: ["image compression", "compress jpg", "compress png", "compress webp", "pixelshrink", "client-side compressor", "privacy image compressor"],
+  title: "PixelShrink Studio — Free Browser-Side Media & Image Suite",
+  description: "Compress, resize, convert formats, and create PDFs. 100% private, secure, fast and client-side browser image & media tools.",
+  keywords: [
+    "image compression",
+    "image resizer",
+    "image to pdf",
+    "convert webp to png",
+    "convert to ico",
+    "video audio extractor",
+    "pixelshrink studio",
+    "client-side image tools"
+  ],
   authors: [{ name: "PixelShrink" }],
   openGraph: {
-    title: "PixelShrink — Free Browser-Side Image Compressor",
-    description: "Reduce image size without sacrificing quality. 100% private and secure browser image compression.",
+    title: "PixelShrink Studio — Free Browser-Side Media & Image Suite",
+    description: "Compress, resize, convert formats, and create PDFs. 100% private and secure browser tools.",
     type: "website",
     locale: "en_US",
-    siteName: "PixelShrink",
+    siteName: "PixelShrink Studio",
   },
   twitter: {
     card: "summary_large_image",
-    title: "PixelShrink — Free Browser-Side Image Compressor",
-    description: "Reduce image size without sacrificing quality. 100% private and secure browser image compression.",
+    title: "PixelShrink Studio — Free Browser-Side Media & Image Suite",
+    description: "Compress, resize, convert formats, and create PDFs. 100% private and secure browser tools.",
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.ico' },
+    ],
+    apple: '/apple-icon',
   },
 };
 
