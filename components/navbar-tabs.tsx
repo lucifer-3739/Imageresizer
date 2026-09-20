@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ToolMode } from '@/types/image';
-import { Minimize2, Scaling, RefreshCw, Crop, Film } from 'lucide-react';
+import { Minimize2, Scaling, RefreshCw, Crop, Film, FileText } from 'lucide-react';
 
 interface NavbarTabsProps {
   activeMode: ToolMode;
@@ -16,7 +16,8 @@ export function NavbarTabs({ activeMode, onSelectMode, disabled = false }: Navba
     { id: 'resize', label: 'Resize', icon: <Scaling className="w-4 h-4" />, badge: 'Presets' },
     { id: 'convert', label: 'Convert', icon: <RefreshCw className="w-4 h-4" />, badge: '6 Formats' },
     { id: 'crop', label: 'Crop & Rotate', icon: <Crop className="w-4 h-4" /> },
-    { id: 'media', label: 'Audio & Frames', icon: <Film className="w-4 h-4" />, badge: 'Media' },
+    { id: 'media', label: 'Audio & Frames', icon: <Film className="w-4 h-4" /> },
+    { id: 'pdf', label: 'PDF Studio', icon: <FileText className="w-4 h-4" />, badge: 'Image to PDF' },
   ];
 
   return (
@@ -29,7 +30,7 @@ export function NavbarTabs({ activeMode, onSelectMode, disabled = false }: Navba
               key={tab.id}
               onClick={() => onSelectMode(tab.id)}
               disabled={disabled}
-              className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer select-none
+              className={`flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer select-none
                 ${
                   isActive
                     ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-white'
@@ -41,7 +42,7 @@ export function NavbarTabs({ activeMode, onSelectMode, disabled = false }: Navba
               <span>{tab.label}</span>
               {tab.badge && (
                 <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded font-bold uppercase tracking-wider
+                  className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase tracking-wider
                     ${
                       isActive
                         ? 'bg-zinc-100 dark:bg-zinc-700 text-zinc-800 dark:text-zinc-200'

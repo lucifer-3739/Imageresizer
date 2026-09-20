@@ -2,7 +2,7 @@
 
 import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, AlertCircle, Film, Image as ImageIcon } from 'lucide-react';
+import { Upload, AlertCircle, Film, FileText, Image as ImageIcon } from 'lucide-react';
 import { ToolMode } from '@/types/image';
 
 interface UploadZoneProps {
@@ -26,28 +26,40 @@ export function UploadZone({
   );
 
   const isMediaMode = toolMode === 'media';
+  const isPdfMode = toolMode === 'pdf';
 
-  const acceptConfig: Record<string, string[]> = isMediaMode
-    ? {
-        'video/mp4': ['.mp4'],
-        'video/webm': ['.webm'],
-        'video/quicktime': ['.mov'],
-        'audio/mpeg': ['.mp3'],
-        'audio/wav': ['.wav'],
-        'audio/ogg': ['.ogg'],
-        'image/jpeg': ['.jpeg', '.jpg'],
-        'image/png': ['.png'],
-        'image/webp': ['.webp'],
-      }
-    : {
-        'image/jpeg': ['.jpeg', '.jpg'],
-        'image/png': ['.png'],
-        'image/webp': ['.webp'],
-        'image/avif': ['.avif'],
-        'image/bmp': ['.bmp'],
-        'image/x-icon': ['.ico'],
-        'image/svg+xml': ['.svg'],
-      };
+  let acceptConfig: Record<string, string[]> = {
+    'image/jpeg': ['.jpeg', '.jpg'],
+    'image/png': ['.png'],
+    'image/webp': ['.webp'],
+    'image/avif': ['.avif'],
+    'image/bmp': ['.bmp'],
+    'image/x-icon': ['.ico'],
+    'image/svg+xml': ['.svg'],
+  };
+
+  if (isMediaMode) {
+    acceptConfig = {
+      'video/mp4': ['.mp4'],
+      'video/webm': ['.webm'],
+      'video/quicktime': ['.mov'],
+      'audio/mpeg': ['.mp3'],
+      'audio/wav': ['.wav'],
+      'audio/ogg': ['.ogg'],
+      'image/jpeg': ['.jpeg', '.jpg'],
+      'image/png': ['.png'],
+      'image/webp': ['.webp'],
+    };
+  } else if (isPdfMode) {
+    acceptConfig = {
+      'image/jpeg': ['.jpeg', '.jpg'],
+      'image/png': ['.png'],
+      'image/webp': ['.webp'],
+      'image/avif': ['.avif'],
+      'image/bmp': ['.bmp'],
+      'application/pdf': ['.pdf'],
+    };
+  }
 
   const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
     onDrop,
@@ -80,7 +92,13 @@ export function UploadZone({
                 : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400'
             }`}
           >
-            {isMediaMode ? <Film className="w-8 h-8" /> : <Upload className="w-8 h-8" />}
+            {isMediaMode ? (
+              <Film className="w-8 h-8" />
+            ) : isPdfMode ? (
+              <FileText className="w-8 h-8 text-rose-500" />
+            ) : (
+              <Upload className="w-8 h-8" />
+            )}
           </div>
 
           <div className="space-y-1.5 max-w-sm">
@@ -89,6 +107,8 @@ export function UploadZone({
                 ? 'Drop your files here'
                 : isMediaMode
                 ? 'Drag & drop video, audio, or images'
+                : isPdfMode
+                ? 'Drag & drop images to convert to PDF'
                 : 'Drag & drop images here'}
             </p>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -101,6 +121,8 @@ export function UploadZone({
             <p className="text-xs text-zinc-400 dark:text-zinc-500">
               {isMediaMode
                 ? 'Supports MP4, WebM, MOV, MP3, WAV, JPG, PNG'
+                : isPdfMode
+                ? 'Supports JPG, PNG, WEBP, AVIF, BMP, PDF'
                 : 'Supports JPEG, PNG, WEBP, AVIF, BMP, ICO up to 50MB'}
             </p>
           </div>
@@ -113,9 +135,7 @@ export function UploadZone({
           <div>
             <p className="font-semibold text-red-800 dark:text-red-400">Some files were rejected</p>
             <p className="text-xs mt-0.5 opacity-90 text-red-700 dark:text-red-500">
-              {isMediaMode
-                ? 'Please upload supported video/audio/image formats.'
-                : 'Please upload supported image formats (JPG, PNG, WEBP, AVIF, BMP, ICO).'}
+              Please upload supported file formats for this tool.
             </p>
           </div>
         </div>

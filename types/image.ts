@@ -1,4 +1,4 @@
-export type ToolMode = 'compress' | 'resize' | 'convert' | 'crop' | 'media';
+export type ToolMode = 'compress' | 'resize' | 'convert' | 'crop' | 'media' | 'pdf';
 
 export interface ImageFile {
   id: string;
@@ -12,6 +12,7 @@ export interface ImageFile {
   aspectRatio: number;
   isVideo?: boolean;
   isAudio?: boolean;
+  isPdf?: boolean;
   duration?: number;
 
   // Processed Output state
@@ -27,6 +28,9 @@ export interface ImageFile {
   // Media extractor specific
   extractedFrames?: { url: string; time: number; name: string; file: File }[];
   extractedAudioFile?: File;
+
+  // PDF specific
+  generatedPdfFile?: File;
 }
 
 export interface CompressionSettings {
@@ -69,6 +73,16 @@ export interface CropTransformSettings {
 export interface MediaExtractSettings {
   mode: 'audio' | 'frames';
   audioFormat: 'wav';
-  frameInterval: number; // snapshot every N seconds
+  frameInterval: number;
   maxFrames: number;
+}
+
+export interface PdfSettings {
+  pageSize: 'a4' | 'letter' | 'legal' | 'fit' | 'square';
+  orientation: 'portrait' | 'landscape' | 'auto';
+  margin: 'none' | 'small' | 'normal' | 'large';
+  layout: '1-per-page' | '2-per-page' | '4-per-page';
+  mergeAllIntoSinglePdf: boolean;
+  imageQuality: number; // 30 to 100
+  pdfTitle: string;
 }

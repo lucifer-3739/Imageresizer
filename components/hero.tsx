@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ToolMode } from '@/types/image';
-import { Shield, Sparkles, Scaling, RefreshCw, Crop, Film, Minimize2 } from 'lucide-react';
+import { Shield, Sparkles, Scaling, RefreshCw, Crop, Film, Minimize2, FileText } from 'lucide-react';
 
 interface HeroProps {
   toolMode?: ToolMode;
@@ -42,6 +42,12 @@ export function Hero({ toolMode = 'compress' }: HeroProps) {
       subtitle: 'Extract crystal-clear audio tracks (WAV) and grab high-res video frames directly on your machine.',
       badge: 'Web Audio & Canvas Engine',
       icon: <Film className="w-3.5 h-3.5 text-sky-500" />,
+    },
+    pdf: {
+      title: 'Convert Images to PDF & Combine Pages',
+      subtitle: 'Generate standard A4, Letter, or borderless PDFs. Merge multiple photos, set margins, and compress embedded pages.',
+      badge: 'pdf-lib Client-Side Engine',
+      icon: <FileText className="w-3.5 h-3.5 text-rose-500" />,
     },
   };
 
