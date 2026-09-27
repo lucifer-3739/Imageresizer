@@ -36,6 +36,12 @@ export function UploadZone({
     'image/bmp': ['.bmp'],
     'image/x-icon': ['.ico'],
     'image/svg+xml': ['.svg'],
+    'image/tiff': ['.tiff', '.tif'],
+    'image/gif': ['.gif'],
+    'image/x-tga': ['.tga'],
+    'image/x-portable-pixmap': ['.ppm'],
+    'image/heic': ['.heic'],
+    'image/heif': ['.heif'],
   };
 
   if (isMediaMode) {
@@ -123,7 +129,7 @@ export function UploadZone({
                 ? 'Supports MP4, WebM, MOV, MP3, WAV, JPG, PNG'
                 : isPdfMode
                 ? 'Supports JPG, PNG, WEBP, AVIF, BMP, PDF'
-                : 'Supports JPEG, PNG, WEBP, AVIF, BMP, ICO up to 50MB'}
+                : 'Supports JPG, PNG, WEBP, AVIF, SVG, TIFF, ICO, BMP, GIF, TGA, PPM'}
             </p>
           </div>
         </div>

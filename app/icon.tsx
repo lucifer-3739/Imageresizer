@@ -11,32 +11,50 @@ export default function Icon() {
     (
       <div
         style={{
-          fontSize: 18,
-          background: '#09090b',
           width: '100%',
           height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'white',
+          background: '#09090b',
           borderRadius: 8,
-          fontWeight: 900,
           border: '1px solid #27272a',
           position: 'relative',
         }}
       >
-        <span style={{ marginLeft: -2 }}>P</span>
+        {/* PDF Document Layer */}
         <div
           style={{
             position: 'absolute',
-            top: 5,
-            right: 5,
-            width: 5,
-            height: 5,
-            borderRadius: '50%',
-            background: '#6366f1',
+            top: 4,
+            right: 4,
+            width: 12,
+            height: 14,
+            borderRadius: 2,
+            background: '#f43f5e',
+            opacity: 0.85,
           }}
         />
+        {/* Image/Media Primary Layer */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 4,
+            left: 4,
+            width: 17,
+            height: 19,
+            borderRadius: 3,
+            background: '#6366f1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: 900,
+            fontSize: 13,
+          }}
+        >
+          P
+        </div>
       </div>
     ),
     {

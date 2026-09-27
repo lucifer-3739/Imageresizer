@@ -33,8 +33,14 @@ export function ConverterPanel({
     { id: 'jpeg', label: 'JPEG', badge: 'Universal', desc: 'Best for standard photos & compatibility', supportsAlpha: false },
     { id: 'png', label: 'PNG', badge: 'Lossless', desc: 'Crisp graphics with transparency', supportsAlpha: true },
     { id: 'avif', label: 'AVIF', badge: 'Next-Gen', desc: 'Ultra-efficient next generation format', supportsAlpha: true },
+    { id: 'svg', label: 'SVG', badge: 'Vector', desc: 'Scalable vector graphic XML wrapper', supportsAlpha: true },
+    { id: 'pdf', label: 'PDF', badge: 'Document', desc: 'Single-image vector PDF document', supportsAlpha: true },
+    { id: 'tiff', label: 'TIFF', badge: 'Print / HDR', desc: 'High dynamic range Tagged Image File', supportsAlpha: true },
     { id: 'ico', label: 'ICO', badge: 'Favicon', desc: 'Windows icon & website favicon', supportsAlpha: true },
     { id: 'bmp', label: 'BMP', badge: 'Bitmap', desc: 'Uncompressed Windows Bitmap file', supportsAlpha: false },
+    { id: 'gif', label: 'GIF', badge: 'Animation', desc: 'Standard Graphics Interchange Format', supportsAlpha: true },
+    { id: 'tga', label: 'TGA', badge: '3D Texture', desc: 'Truevision Targa game/3D asset file', supportsAlpha: true },
+    { id: 'ppm', label: 'PPM', badge: 'Raw Pixel', desc: 'Netpbm portable 24-bit color pixmap', supportsAlpha: false },
   ];
 
   const activeFmtObj = formats.find((f) => f.id === settings.targetFormat);
@@ -47,7 +53,7 @@ export function ConverterPanel({
           <h2 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">Image Converter</h2>
         </div>
         <span className="text-xs font-bold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-          6 Formats Supported
+          12 Formats Supported
         </span>
       </div>
 

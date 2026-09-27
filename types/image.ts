@@ -1,5 +1,57 @@
 export type ToolMode = 'compress' | 'resize' | 'convert' | 'crop' | 'media' | 'pdf';
 
+export type PdfToolSubMode =
+  | 'image-to-pdf'
+  | 'resize-pdf'
+  | 'edit-pages'
+  | 'watermark'
+  | 'split-merge';
+
+export interface PdfPageInfo {
+  pageNumber: number;
+  width: number;
+  height: number;
+  rotation: number;
+}
+
+export interface PdfDocInfo {
+  pageCount: number;
+  pages: PdfPageInfo[];
+  title?: string;
+  author?: string;
+}
+
+export interface PdfPageEditState {
+  pageIndex: number;
+  rotation: number; // 0, 90, 180, 270
+  deleted: boolean;
+}
+
+export interface PdfResizeOptions {
+  targetSize: 'a4' | 'letter' | 'legal' | 'a3' | 'a5' | 'custom';
+  customWidth?: number;
+  customHeight?: number;
+  orientation: 'portrait' | 'landscape' | 'auto';
+  scaleContent: boolean;
+  margin: 'none' | 'small' | 'normal' | 'large';
+}
+
+export interface PdfWatermarkOptions {
+  text: string;
+  fontSize: number;
+  opacity: number; // 0.05 to 1.0
+  color: string;
+  rotation: number; // 0 to 360, default 45
+  addPageNumbers: boolean;
+  pageNumberPosition: 'bottom-center' | 'bottom-right' | 'top-right';
+  pageNumberFormat: 'page-x-of-y' | 'x-of-y' | 'x';
+}
+
+export interface PdfSplitMergeOptions {
+  action: 'split' | 'merge';
+  splitRange: string; // e.g. "1-3, 5"
+}
+
 export interface ImageFile {
   id: string;
   file: File;
@@ -14,6 +66,10 @@ export interface ImageFile {
   isAudio?: boolean;
   isPdf?: boolean;
   duration?: number;
+
+  // PDF inspection metadata
+  pdfDocInfo?: PdfDocInfo;
+  pdfPageEdits?: Record<number, PdfPageEditState>;
 
   // Processed Output state
   compressedFile?: File;
@@ -49,17 +105,29 @@ export interface ResizeSettings {
   preset?: string;
   maintainAspectRatio: boolean;
   fit: 'contain' | 'cover' | 'stretch';
-  backgroundColor: string; // hex or 'transparent'
+  backgroundColor: string;
   quality: number;
 }
 
-export type SupportedConvertFormat = 'jpeg' | 'png' | 'webp' | 'avif' | 'bmp' | 'ico';
+export type SupportedConvertFormat =
+  | 'webp'
+  | 'jpeg'
+  | 'png'
+  | 'avif'
+  | 'svg'
+  | 'pdf'
+  | 'tiff'
+  | 'ico'
+  | 'bmp'
+  | 'gif'
+  | 'tga'
+  | 'ppm';
 
 export interface ConvertSettings {
   targetFormat: SupportedConvertFormat;
   quality: number;
   backgroundColor: string;
-  icoSize: number; // 16, 32, 48, 64, 128, 256
+  icoSize: number;
 }
 
 export interface CropTransformSettings {
@@ -71,18 +139,24 @@ export interface CropTransformSettings {
 }
 
 export interface MediaExtractSettings {
-  mode: 'audio' | 'frames';
+  mode: 'audio' | 'frames' | 'url-music';
   audioFormat: 'wav';
   frameInterval: number;
   maxFrames: number;
 }
 
 export interface PdfSettings {
+  subMode: PdfToolSubMode;
   pageSize: 'a4' | 'letter' | 'legal' | 'fit' | 'square';
   orientation: 'portrait' | 'landscape' | 'auto';
   margin: 'none' | 'small' | 'normal' | 'large';
   layout: '1-per-page' | '2-per-page' | '4-per-page';
   mergeAllIntoSinglePdf: boolean;
-  imageQuality: number; // 30 to 100
+  imageQuality: number;
   pdfTitle: string;
+
+  // Advanced PDF Edit & Resize Settings
+  resizeOptions: PdfResizeOptions;
+  watermarkOptions: PdfWatermarkOptions;
+  splitMergeOptions: PdfSplitMergeOptions;
 }

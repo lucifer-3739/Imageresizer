@@ -16,7 +16,7 @@ export function NavbarTabs({ activeMode, onSelectMode, disabled = false }: Navba
     { id: 'resize', label: 'Resize', icon: <Scaling className="w-4 h-4" />, badge: 'Presets' },
     { id: 'convert', label: 'Convert', icon: <RefreshCw className="w-4 h-4" />, badge: '6 Formats' },
     { id: 'crop', label: 'Crop & Rotate', icon: <Crop className="w-4 h-4" /> },
-    { id: 'media', label: 'Audio & Frames', icon: <Film className="w-4 h-4" /> },
+    { id: 'media', label: 'Audio & Music', icon: <Film className="w-4 h-4" />, badge: 'URL Music' },
     { id: 'pdf', label: 'PDF Studio', icon: <FileText className="w-4 h-4" />, badge: 'Image to PDF' },
   ];
 

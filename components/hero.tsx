@@ -38,15 +38,15 @@ export function Hero({ toolMode = 'compress' }: HeroProps) {
       icon: <Crop className="w-3.5 h-3.5 text-amber-500" />,
     },
     media: {
-      title: 'Extract Audio & Video Snapshots',
-      subtitle: 'Extract crystal-clear audio tracks (WAV) and grab high-res video frames directly on your machine.',
-      badge: 'Web Audio & Canvas Engine',
+      title: 'Download URL Music & Extract Media',
+      subtitle: 'Download audio & music streams from URLs, trim clips, extract lossless WAV tracks, and capture high-res video frames.',
+      badge: 'URL Music Downloader & Web Audio',
       icon: <Film className="w-3.5 h-3.5 text-sky-500" />,
     },
     pdf: {
-      title: 'Convert Images to PDF & Combine Pages',
-      subtitle: 'Generate standard A4, Letter, or borderless PDFs. Merge multiple photos, set margins, and compress embedded pages.',
-      badge: 'pdf-lib Client-Side Engine',
+      title: 'PDF Resizer, Editor & Converter',
+      subtitle: 'Resize PDF pages to A4/Letter, rotate & delete pages, add text watermarks & page numbers, split, and merge PDFs client-side.',
+      badge: 'All-in-One Client-Side PDF Suite',
       icon: <FileText className="w-3.5 h-3.5 text-rose-500" />,
     },
   };

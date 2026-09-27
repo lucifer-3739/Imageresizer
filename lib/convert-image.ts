@@ -1,4 +1,5 @@
 import { ConvertSettings, SupportedConvertFormat } from '@/types/image';
+import { PDFDocument } from 'pdf-lib';
 
 /**
  * Creates a Windows BMP File Blob from canvas ImageData.
@@ -66,6 +67,127 @@ function createBmpBlob(imageData: ImageData): Blob {
 }
 
 /**
+ * Creates a Truevision TGA (Targa) 32-bit BGRA uncompressed image Blob.
+ */
+function createTgaBlob(imageData: ImageData): Blob {
+  const width = imageData.width;
+  const height = imageData.height;
+  const data = imageData.data;
+
+  // 18-byte TGA Header
+  const header = new Uint8Array(18);
+  header[2] = 2; // uncompressed true-color image
+  header[12] = width & 0xff;
+  header[13] = (width >> 8) & 0xff;
+  header[14] = height & 0xff;
+  header[15] = (height >> 8) & 0xff;
+  header[16] = 32; // 32 bits per pixel (BGRA)
+  header[17] = 0x20; // top-to-bottom pixel order
+
+  const pixelData = new Uint8Array(width * height * 4);
+  for (let i = 0; i < width * height; i++) {
+    const srcIdx = i * 4;
+    pixelData[srcIdx] = data[srcIdx + 2]; // B
+    pixelData[srcIdx + 1] = data[srcIdx + 1]; // G
+    pixelData[srcIdx + 2] = data[srcIdx]; // R
+    pixelData[srcIdx + 3] = data[srcIdx + 3]; // A
+  }
+
+  return new Blob([header, pixelData], { type: 'image/x-tga' });
+}
+
+/**
+ * Creates a Netpbm PPM (P6 Binary) Image Blob.
+ */
+function createPpmBlob(imageData: ImageData): Blob {
+  const width = imageData.width;
+  const height = imageData.height;
+  const data = imageData.data;
+
+  const headerStr = `P6\n${width} ${height}\n255\n`;
+  const headerBytes = new TextEncoder().encode(headerStr);
+  const rgbData = new Uint8Array(width * height * 3);
+
+  for (let i = 0; i < width * height; i++) {
+    const srcIdx = i * 4;
+    rgbData[i * 3] = data[srcIdx];
+    rgbData[i * 3 + 1] = data[srcIdx + 1];
+    rgbData[i * 3 + 2] = data[srcIdx + 2];
+  }
+
+  return new Blob([headerBytes, rgbData], { type: 'image/x-portable-pixmap' });
+}
+
+/**
+ * Creates a Baseline Little-Endian TIFF Image Blob (RGBA).
+ */
+function createTiffBlob(imageData: ImageData): Blob {
+  const width = imageData.width;
+  const height = imageData.height;
+  const data = imageData.data;
+
+  const numPixels = width * height;
+  const dataOffset = 8;
+  const imageByteLength = numPixels * 4;
+  const ifdOffset = dataOffset + imageByteLength;
+  const numTags = 10;
+  const ifdSize = 2 + numTags * 12 + 4;
+  const extraDataOffset = ifdOffset + ifdSize;
+
+  const totalSize = extraDataOffset + 32;
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
+  const u8 = new Uint8Array(buffer);
+
+  // Header: II (Little-endian) + 42 + offset to IFD
+  view.setUint16(0, 0x4949, true); // 'II'
+  view.setUint16(2, 42, true);
+  view.setUint32(4, ifdOffset, true);
+
+  // Write pixel data (RGBA)
+  u8.set(data, dataOffset);
+
+  // IFD
+  let ifdPos = ifdOffset;
+  view.setUint16(ifdPos, numTags, true);
+  ifdPos += 2;
+
+  function writeTag(tag: number, type: number, count: number, valueOrOffset: number) {
+    view.setUint16(ifdPos, tag, true);
+    view.setUint16(ifdPos + 2, type, true); // 3=SHORT, 4=LONG
+    view.setUint32(ifdPos + 4, count, true);
+    if (type === 3 && count === 1) {
+      view.setUint16(ifdPos + 8, valueOrOffset, true);
+      view.setUint16(ifdPos + 10, 0, true);
+    } else {
+      view.setUint32(ifdPos + 8, valueOrOffset, true);
+    }
+    ifdPos += 12;
+  }
+
+  const bitsPerSampleOffset = extraDataOffset;
+  view.setUint16(bitsPerSampleOffset, 8, true);
+  view.setUint16(bitsPerSampleOffset + 2, 8, true);
+  view.setUint16(bitsPerSampleOffset + 4, 8, true);
+  view.setUint16(bitsPerSampleOffset + 6, 8, true);
+
+  writeTag(256, 4, 1, width); // ImageWidth
+  writeTag(257, 4, 1, height); // ImageLength
+  writeTag(258, 3, 4, bitsPerSampleOffset); // BitsPerSample (8,8,8,8)
+  writeTag(259, 3, 1, 1); // Compression (1 = uncompressed)
+  writeTag(262, 3, 1, 2); // PhotometricInterpretation (2 = RGB)
+  writeTag(273, 4, 1, dataOffset); // StripOffsets
+  writeTag(277, 3, 1, 4); // SamplesPerPixel (4)
+  writeTag(278, 4, 1, height); // RowsPerStrip
+  writeTag(279, 4, 1, imageByteLength); // StripByteCounts
+  writeTag(284, 3, 1, 1); // PlanarConfiguration (1 = chunky)
+
+  view.setUint32(ifdPos, 0, true); // next IFD = 0
+
+  return new Blob([buffer], { type: 'image/tiff' });
+}
+
+/**
  * Creates a Windows Favicon (.ico) containing PNG byte payload.
  */
 async function createIcoBlob(canvas: HTMLCanvasElement, size: number): Promise<Blob> {
@@ -116,8 +238,43 @@ async function createIcoBlob(canvas: HTMLCanvasElement, size: number): Promise<B
 }
 
 /**
+ * Creates a clean Scalable Vector Graphics (SVG) Blob embedding high-res raster data.
+ */
+function createSvgBlob(canvas: HTMLCanvasElement, width: number, height: number): Blob {
+  const dataUrl = canvas.toDataURL('image/png');
+  const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" version="1.1">
+  <image width="${width}" height="${height}" xlink:href="${dataUrl}"/>
+</svg>`;
+  return new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
+}
+
+/**
+ * Creates a Vector PDF document Blob containing the converted image.
+ */
+async function createPdfBlob(canvas: HTMLCanvasElement, width: number, height: number): Promise<Blob> {
+  const pdfDoc = await PDFDocument.create();
+  const page = pdfDoc.addPage([width, height]);
+
+  const pngDataUrl = canvas.toDataURL('image/png');
+  const base64Data = pngDataUrl.split(',')[1];
+  const pngBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+
+  const embeddedImage = await pdfDoc.embedPng(pngBytes);
+  page.drawImage(embeddedImage, {
+    x: 0,
+    y: 0,
+    width,
+    height,
+  });
+
+  const pdfBytes = await pdfDoc.save();
+  return new Blob([pdfBytes as any], { type: 'application/pdf' });
+}
+
+/**
  * Universal Multi-Format Image Converter.
- * Supports: JPEG, PNG, WEBP, AVIF, BMP, ICO.
+ * Supports: WEBP, JPEG, PNG, AVIF, SVG, PDF, TIFF, ICO, BMP, GIF, TGA, PPM.
  */
 export async function convertImage(
   file: File,
@@ -130,7 +287,7 @@ export async function convertImage(
 
     img.onload = async () => {
       URL.revokeObjectURL(img.src);
-      if (onProgress) onProgress(25);
+      if (onProgress) onProgress(20);
 
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
@@ -145,21 +302,22 @@ export async function convertImage(
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
 
-      // If format doesn't support transparency (JPEG/BMP) or user chose a custom bg, fill canvas
+      // If format doesn't support transparency (JPEG/BMP/PPM) or user chose a custom bg, fill canvas
+      const opaqueFormats: SupportedConvertFormat[] = ['jpeg', 'bmp', 'ppm'];
       const needsBackground =
-        settings.targetFormat === 'jpeg' ||
-        settings.targetFormat === 'bmp' ||
+        opaqueFormats.includes(settings.targetFormat) ||
         (settings.backgroundColor && settings.backgroundColor !== 'transparent');
 
       if (needsBackground) {
-        ctx.fillStyle = settings.backgroundColor && settings.backgroundColor !== 'transparent'
-          ? settings.backgroundColor
-          : '#ffffff';
+        ctx.fillStyle =
+          settings.backgroundColor && settings.backgroundColor !== 'transparent'
+            ? settings.backgroundColor
+            : '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
       ctx.drawImage(img, 0, 0);
-      if (onProgress) onProgress(60);
+      if (onProgress) onProgress(50);
 
       const qualityVal = Math.min(1.0, Math.max(0.1, settings.quality / 100));
       const dotIdx = file.name.lastIndexOf('.');
@@ -169,45 +327,80 @@ export async function convertImage(
         let outputBlob: Blob;
         let ext = settings.targetFormat as string;
 
-        if (settings.targetFormat === 'bmp') {
-          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          outputBlob = createBmpBlob(imgData);
-        } else if (settings.targetFormat === 'ico') {
-          outputBlob = await createIcoBlob(canvas, settings.icoSize || 64);
-        } else {
-          // Standard browser formats: jpeg, png, webp, avif
-          const mimeType = `image/${settings.targetFormat}`;
+        switch (settings.targetFormat) {
+          case 'bmp': {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            outputBlob = createBmpBlob(imgData);
+            break;
+          }
+          case 'tga': {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            outputBlob = createTgaBlob(imgData);
+            break;
+          }
+          case 'ppm': {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            outputBlob = createPpmBlob(imgData);
+            break;
+          }
+          case 'tiff': {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            outputBlob = createTiffBlob(imgData);
+            break;
+          }
+          case 'svg': {
+            outputBlob = createSvgBlob(canvas, canvas.width, canvas.height);
+            break;
+          }
+          case 'pdf': {
+            outputBlob = await createPdfBlob(canvas, canvas.width, canvas.height);
+            break;
+          }
+          case 'ico': {
+            outputBlob = await createIcoBlob(canvas, settings.icoSize || 64);
+            break;
+          }
+          case 'gif': {
+            outputBlob = await new Promise<Blob>((res, rej) => {
+              canvas.toBlob((b) => (b ? res(b) : rej(new Error('GIF conversion failed'))), 'image/gif');
+            });
+            break;
+          }
+          default: {
+            // Standard browser formats: webp, jpeg, png, avif
+            const mimeType = `image/${settings.targetFormat}`;
 
-          outputBlob = await new Promise<Blob>((res, rej) => {
-            canvas.toBlob(
-              (b) => {
-                if (b) {
-                  res(b);
-                } else {
-                  // If AVIF is unsupported on older browsers, fallback gracefully to WEBP
-                  if (settings.targetFormat === 'avif') {
-                    canvas.toBlob((fallbackB) => {
-                      if (fallbackB) res(fallbackB);
-                      else rej(new Error('Format conversion failed'));
-                    }, 'image/webp', qualityVal);
+            outputBlob = await new Promise<Blob>((res, rej) => {
+              canvas.toBlob(
+                (b) => {
+                  if (b) {
+                    res(b);
                   } else {
-                    rej(new Error('Format conversion failed'));
+                    // If AVIF is unsupported on older browser engines, fallback gracefully to WEBP
+                    if (settings.targetFormat === 'avif') {
+                      canvas.toBlob((fallbackB) => {
+                        if (fallbackB) res(fallbackB);
+                        else rej(new Error('Format conversion failed'));
+                      }, 'image/webp', qualityVal);
+                    } else {
+                      rej(new Error('Format conversion failed'));
+                    }
                   }
-                }
-              },
-              mimeType,
-              qualityVal
-            );
-          });
+                },
+                mimeType,
+                qualityVal
+              );
+            });
+            break;
+          }
         }
 
         if (onProgress) onProgress(100);
 
-        const convertedFile = new File(
-          [outputBlob],
-          `${baseName}_converted.${ext}`,
-          { type: outputBlob.type, lastModified: Date.now() }
-        );
+        const convertedFile = new File([outputBlob], `${baseName}_converted.${ext}`, {
+          type: outputBlob.type,
+          lastModified: Date.now(),
+        });
 
         resolve(convertedFile);
       } catch (err: any) {
