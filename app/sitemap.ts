@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://pixelshrink.com';
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://imageresizer-pixel.vercel.app/';
   const lastModified = new Date();
 
   const routes = [
