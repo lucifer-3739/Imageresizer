@@ -44,6 +44,7 @@ import { ResultSection } from '@/components/result-section';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Logo } from '@/components/logo';
 import { AdBanner } from '@/components/ad-banner';
+import { SeoContentSection } from '@/components/seo-content-section';
 import { formatSize } from '@/lib/format-size';
 
 import {
@@ -922,6 +923,9 @@ export default function Home() {
 
             {/* Google AdSense Banner Slot */}
             <AdBanner className="max-w-5xl mx-auto pt-4" />
+
+            {/* Rich SEO Content, Value Pillars, Tutorials & FAQ Section */}
+            <SeoContentSection />
           </div>
         ) : (
           // Dashboard Studio Workspace View

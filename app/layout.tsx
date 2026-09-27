@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { GoogleAdSense } from "@/components/google-adsense";
+import { JsonLd } from "@/components/json-ld";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,31 +15,86 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "PixelShrink Studio — Free Browser-Side Media & Image Suite",
-  description: "Compress, resize, convert formats, and create PDFs. 100% private, secure, fast and client-side browser image & media tools.",
-  keywords: [
-    "image compression",
-    "image resizer",
-    "image to pdf",
-    "convert webp to png",
-    "convert to ico",
-    "video audio extractor",
-    "pixelshrink studio",
-    "client-side image tools"
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://pixelshrink.com';
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
   ],
-  authors: [{ name: "PixelShrink" }],
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
+
+export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: "PixelShrink — Free Image Compressor, Resizer, 12-Format Converter & PDF Suite",
+    template: "%s | PixelShrink Studio",
+  },
+  description:
+    "Compress, resize, convert 12 image formats, edit PDFs, and extract media audio 100% free and client-side. Fast, private, zero data uploads.",
+  applicationName: "PixelShrink Studio",
+  keywords: [
+    "image compressor",
+    "compress image online",
+    "lossless image compression",
+    "image resizer",
+    "youtube thumbnail resizer",
+    "instagram photo resizer",
+    "image to pdf converter",
+    "pdf editor free",
+    "pdf watermark online",
+    "merge pdf files",
+    "convert webp to png",
+    "convert png to webp",
+    "convert to ico favicon",
+    "avif to jpg converter",
+    "video audio extractor",
+    "youtube to mp3 320kbps",
+    "pixelshrink studio",
+    "client-side browser tools",
+    "free media tools"
+  ],
+  authors: [{ name: "PixelShrink Studio", url: siteUrl }],
+  creator: "PixelShrink",
+  publisher: "PixelShrink Studio",
+  alternates: {
+    canonical: "/",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   openGraph: {
-    title: "PixelShrink Studio — Free Browser-Side Media & Image Suite",
-    description: "Compress, resize, convert formats, and create PDFs. 100% private and secure browser tools.",
+    title: "PixelShrink — Free Image Compressor, Resizer, Converter & PDF Suite",
+    description: "Compress images up to 90%, convert between 12 formats, edit PDFs, and extract media with 100% client-side privacy.",
+    url: siteUrl,
     type: "website",
     locale: "en_US",
     siteName: "PixelShrink Studio",
+    images: [
+      {
+        url: "/apple-touch-icon.png",
+        width: 180,
+        height: 180,
+        alt: "PixelShrink Studio Logo",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "PixelShrink Studio — Free Browser-Side Media & Image Suite",
-    description: "Compress, resize, convert formats, and create PDFs. 100% private and secure browser tools.",
+    title: "PixelShrink — Free Image Compressor, Resizer, Converter & PDF Suite",
+    description: "Compress images up to 90%, convert between 12 formats, edit PDFs, and extract media with 100% client-side privacy.",
+    images: ["/apple-touch-icon.png"],
   },
   icons: {
     icon: [
@@ -69,6 +125,7 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-50 transition-colors duration-200">
+        <JsonLd />
         <GoogleAdSense />
         <ThemeProvider
           attribute="class"
