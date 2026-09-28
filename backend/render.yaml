@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: pixelshrink-python-backend
+    env: python
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python backend/app.py
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 10000

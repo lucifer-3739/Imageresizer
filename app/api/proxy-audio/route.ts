@@ -162,9 +162,71 @@ export async function GET(request: NextRequest) {
   }
 
   const targetUrl = rawUrl.trim();
+  const pythonBackendUrl = process.env.PYTHON_BACKEND_URL ? process.env.PYTHON_BACKEND_URL.replace(/\/$/, '') : null;
 
   // -------------------------------------------------------------
-  // PRIMARY ENGINE: PYTHON yt-dlp & FFMPEG UNIVERSAL EXTRACTOR & MERGER
+  // PRIMARY ENGINE OPTION A: REMOTE / SEPARATED PYTHON BACKEND SERVICE
+  // -------------------------------------------------------------
+  if (pythonBackendUrl) {
+    try {
+      if (isInfoOnly) {
+        const infoRes = await fetch(`${pythonBackendUrl}/info?url=${encodeURIComponent(targetUrl)}`, {
+          headers: { 'User-Agent': 'PixelShrink-NextJs-Proxy/1.0' },
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+        });
+        if (infoRes.ok) {
+          const infoJson = await infoRes.json();
+          if (infoJson && !infoJson.error && infoJson.formats?.length > 0) {
+            return NextResponse.json(infoJson);
+          }
+        }
+      } else {
+        const dlUrl = new URL(`${pythonBackendUrl}/download`);
+        dlUrl.searchParams.set('url', targetUrl);
+        if (formatIdParam) dlUrl.searchParams.set('format_id', formatIdParam);
+        if (mediaType) dlUrl.searchParams.set('type', mediaType);
+        if (qualityParam) dlUrl.searchParams.set('quality', qualityParam);
+
+        const dlRes = await fetch(dlUrl.toString(), {
+          headers: { 'User-Agent': 'PixelShrink-NextJs-Proxy/1.0' },
+          cache: 'no-store',
+        });
+
+        if (dlRes.ok && dlRes.body) {
+          const headers = new Headers();
+          const contentType = dlRes.headers.get('content-type') || (mediaType === 'video' ? 'video/mp4' : 'audio/mpeg');
+          headers.set('Content-Type', contentType);
+          headers.set('Access-Control-Allow-Origin', '*');
+          headers.set(
+            'Access-Control-Expose-Headers',
+            'Content-Disposition, X-Media-Title, X-Media-Duration, X-Media-Type, Content-Type, Content-Length'
+          );
+
+          const cd = dlRes.headers.get('content-disposition');
+          if (cd) headers.set('Content-Disposition', cd);
+          const cl = dlRes.headers.get('content-length');
+          if (cl) headers.set('Content-Length', cl);
+          const titleH = dlRes.headers.get('x-media-title');
+          if (titleH) headers.set('X-Media-Title', titleH);
+          const durH = dlRes.headers.get('x-media-duration');
+          if (durH) headers.set('X-Media-Duration', durH);
+          headers.set('X-Media-Type', mediaType);
+          headers.set('Cache-Control', 'public, max-age=3600');
+
+          return new NextResponse(dlRes.body as any, {
+            status: 200,
+            headers,
+          });
+        }
+      }
+    } catch (remoteErr) {
+      // Remote backend unreachable or timed out, proceed to local CLI fallback
+    }
+  }
+
+  // -------------------------------------------------------------
+  // PRIMARY ENGINE OPTION B: LOCAL PYTHON yt-dlp & FFMPEG
   // -------------------------------------------------------------
   try {
     if (isInfoOnly) {
